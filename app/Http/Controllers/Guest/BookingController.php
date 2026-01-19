@@ -28,14 +28,7 @@ class BookingController extends Controller
         $availableRooms = Room::where('status', 'available')
             ->whereDoesntHave('bookings', function ($query) use ($checkInDate, $checkOutDate) {
                 $query->where('status', '!=', 'cancelled')
-                    ->where(function ($q) use ($checkInDate, $checkOutDate) {
-                        // Check for date overlap:
-                        // Overlap exists if: (new_start < existing_end) AND (new_end > existing_start)
-                        $q->where(function ($q2) use ($checkInDate, $checkOutDate) {
-                            $q2->where('check_in_date', '<', $checkOutDate)
-                               ->where('check_out_date', '>', $checkInDate);
-                        });
-                    });
+                      ->overlapping($checkInDate, $checkOutDate);
             })
             ->with('images')
             ->get();
@@ -66,11 +59,7 @@ class BookingController extends Controller
         // Double booking prevention - check for overlapping bookings
         $hasOverlap = Booking::where('room_id', $request->room_id)
             ->where('status', '!=', 'cancelled')
-            ->where(function ($query) use ($request) {
-                // Overlap exists if: (new_start < existing_end) AND (new_end > existing_start)
-                $query->where('check_in_date', '<', $request->check_out_date)
-                      ->where('check_out_date', '>', $request->check_in_date);
-            })
+            ->overlapping($request->check_in_date, $request->check_out_date)
             ->exists();
 
         if ($hasOverlap) {
