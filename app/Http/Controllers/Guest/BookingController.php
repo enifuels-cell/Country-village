@@ -17,8 +17,8 @@ class BookingController extends Controller
     public function checkAvailability(Request $request)
     {
         $request->validate([
-            'check_in_date' => 'required|date|after_or_equal:today',
-            'check_out_date' => 'required|date|after:check_in_date',
+            'check_in_date' => 'required|date',
+            'check_out_date' => 'required|date',
         ]);
 
         $checkInDate = $request->check_in_date;
@@ -29,13 +29,12 @@ class BookingController extends Controller
             ->whereDoesntHave('bookings', function ($query) use ($checkInDate, $checkOutDate) {
                 $query->where('status', '!=', 'cancelled')
                     ->where(function ($q) use ($checkInDate, $checkOutDate) {
-                        // Check for date overlap
-                        $q->whereBetween('check_in_date', [$checkInDate, $checkOutDate])
-                          ->orWhereBetween('check_out_date', [$checkInDate, $checkOutDate])
-                          ->orWhere(function ($q2) use ($checkInDate, $checkOutDate) {
-                              $q2->where('check_in_date', '<=', $checkInDate)
-                                 ->where('check_out_date', '>=', $checkOutDate);
-                          });
+                        // Check for date overlap:
+                        // Overlap exists if: (new_start < existing_end) AND (new_end > existing_start)
+                        $q->where(function ($q2) use ($checkInDate, $checkOutDate) {
+                            $q2->where('check_in_date', '<', $checkOutDate)
+                               ->where('check_out_date', '>', $checkInDate);
+                        });
                     });
             })
             ->with('images')
@@ -60,20 +59,17 @@ class BookingController extends Controller
             'guest_name' => 'required|string|max:255',
             'guest_phone' => 'required|string|max:20',
             'guest_email' => 'required|email|max:255',
-            'check_in_date' => 'required|date|after_or_equal:today',
-            'check_out_date' => 'required|date|after:check_in_date',
+            'check_in_date' => 'required|date',
+            'check_out_date' => 'required|date',
         ]);
 
         // Double booking prevention - check for overlapping bookings
         $hasOverlap = Booking::where('room_id', $request->room_id)
             ->where('status', '!=', 'cancelled')
             ->where(function ($query) use ($request) {
-                $query->whereBetween('check_in_date', [$request->check_in_date, $request->check_out_date])
-                      ->orWhereBetween('check_out_date', [$request->check_in_date, $request->check_out_date])
-                      ->orWhere(function ($q) use ($request) {
-                          $q->where('check_in_date', '<=', $request->check_in_date)
-                            ->where('check_out_date', '>=', $request->check_out_date);
-                      });
+                // Overlap exists if: (new_start < existing_end) AND (new_end > existing_start)
+                $query->where('check_in_date', '<', $request->check_out_date)
+                      ->where('check_out_date', '>', $request->check_in_date);
             })
             ->exists();
 
